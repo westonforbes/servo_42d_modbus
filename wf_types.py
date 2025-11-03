@@ -46,6 +46,31 @@ class Status(Enum):
     HOMING = 5
     CALIBRATION = 6
 
+class Parse:
+    @staticmethod
+    def parse_int16(b1, b2):
+        """Helper to parse a signed 16-bit integer from two bytes (big-endian)."""
+        val = (b1 << 8) | b2
+        return val - (1 << 16) if val & (1 << 15) else val
+
+    @staticmethod
+    def parse_int32(b1, b2, b3, b4):
+        """Helper to parse a signed 32-bit integer from four bytes (big-endian)."""
+        val = (b1 << 24) | (b2 << 16) | (b3 << 8) | b4
+        return val - (1 << 32) if val & (1 << 31) else val
+
+    @staticmethod
+    def parse_int48(b1, b2, b3, b4, b5, b6):
+        """Helper to parse a signed 48-bit integer from six bytes (big-endian)."""
+        val = (b1 << 40) | (b2 << 32) | (b3 << 24) | (b4 << 16) | (b5 << 8) | b6
+        return val - (1 << 48) if val & (1 << 47) else val
+    
+    @staticmethod
+    def _parse_uint32(b1, b2, b3, b4):
+        """Helper to parse an unsigned 32-bit integer from four bytes (big-endian)."""
+        # For unsigned integers, we just combine the bytes with shifting. No two's complement correction is needed.
+        return (b1 << 24) | (b2 << 16) | (b3 << 8) | b4
+
 class TypeCheck:
 
     @staticmethod
@@ -62,6 +87,11 @@ class TypeCheck:
     def is_bool(value) -> bool:
         """Check if value is a boolean."""
         return isinstance(value, bool)
+    
+    @staticmethod
+    def is_float(value) -> bool:
+        """Check if value is a float."""
+        return isinstance(value, float)
 
     @staticmethod
     def is_uint8(value) -> bool:
