@@ -1,7 +1,6 @@
 from wf_console import Console
 from wf_types import TypeCheck
 import wf_types
-
 import serial
 
 class Modbus:

@@ -37,74 +37,6 @@ class Servo42dModbus:
 
     # region: Functions that are complete, commented, parameter sanitized and rock-solid-----------------------------------------
 
-    def setup_routine(self, verbose = True) -> bool:
-        """
-        If you're having issues with the motor, do the following.
-        1. Disengage the motor shaft from any mechanical load.
-        2. Via the motor screen, scroll down to "Restore" (factory reset) and reset.
-        3. Once reset is complete, via the motor screen, scroll down to "MB_RTU" and set to enable.
-        4. Initialize this class with the correct COM port and slave address (slave address is 0x01 by default).
-        5. Call this setup_routine() method to configure the motor for serial control.
-        6. Verify the motor calibrates (movement for a couple of seconds), then stops, then performs a test move.
-        7. Re-engage the motor shaft to the mechanical load.
-        
-        """
-
-        # Calibrate servo. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.5, Page 60.
-        #if verbose: Console.fancy_print("<INFO>\ncalibrating motor (required for SR_CLOSE mode)... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.5, Page 60.</INFO>")
-        #return_value = self.calibrate(verbose=True)
-        #if verbose:
-        #    if return_value: Console.fancy_print("<GOOD>Calibration command sent. Wait for device to finish.</GOOD>")
-        #    else: Console.fancy_print("<BAD>Failed to send calibration command.</BAD>")
-        #time.sleep(15)  # Wait 15 seconds for calibration to complete.
-
-        # Disable the enable pin. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.10, Page 63.
-        if verbose: Console.fancy_print("<INFO>\ndisabling enable pin... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.10, Page 63.</INFO>")
-        return_value = self.disable_enable_pin(verbose=True)
-        if verbose:
-            if return_value: Console.fancy_print("<GOOD>enable pin disabled.</GOOD>")
-            else: Console.fancy_print("<BAD>failed to disable enable pin.</BAD>")
-
-        # Read the enable status. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.1.7, Page 58.
-        if verbose: Console.fancy_print("<INFO>\nreading enable status... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.1.7, Page 58.</INFO>")
-        return_value = self.read_en_pin_status(verbose=True)
-        if verbose:
-            if return_value: Console.fancy_print("<GOOD>enabled.</GOOD>")
-            else: Console.fancy_print("<BAD>disabled.</BAD>")
-
-        # Set workmode to SR_CLOSE. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.6, Page 61.
-        if verbose: Console.fancy_print("<INFO>\nsetting workmode to SR_CLOSE... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.6, Page 61.</INFO>")
-        return_value = self.set_work_mode(wf_types.WorkMode.SR_CLOSE, verbose=True)
-        if verbose:
-            if return_value: Console.fancy_print("<GOOD>workmode set to SR_CLOSE.</GOOD>")
-            else: Console.fancy_print("<BAD>failed to set workmode to SR_CLOSE.</BAD>")
-
-        # Enable serial mode motor control. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.20, Page 67.
-        if verbose: Console.fancy_print("<INFO>\nallowing serial control of motor... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.20, Page 67.</INFO>")
-        return_value = self.set_serial_mode_motor_enable(wf_types.EnableDisable.ENABLE, verbose=True)
-        if verbose:
-            if return_value: Console.fancy_print("<GOOD>serial control enabled.</GOOD>")
-            else: Console.fancy_print("<BAD>failed to enable serial control.</BAD>")
-
-        # Clear motor protection. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.13, Page 64.
-        if verbose: Console.fancy_print("<INFO>\nclearing motor protection... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.13, Page 64.</INFO>")
-        return_value = self.clear_motor_protection(verbose=True)
-        if verbose:
-            if return_value: Console.fancy_print("<GOOD>motor protection cleared.</GOOD>")
-            else: Console.fancy_print("<BAD>failed to clear motor protection.</BAD>")
-
-        # Read the motor shaft protection status. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.1.9, Page 58.
-        if verbose: Console.fancy_print("<INFO>\nreading motor shaft protection status... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.1.9, Page 58.</INFO>")
-        return_value = self.read_motor_shaft_protection_status(verbose=True)
-        if verbose:
-            if not return_value: Console.fancy_print("<GOOD>disabled.</GOOD>")
-            else: Console.fancy_print("<BAD>enabled.</BAD>")
-
-        # Perform a relative move by pulses to verify communication. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.3.4.1, Page 79.
-        if verbose: Console.fancy_print("<INFO>\nperforming test relative move by pulses... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.3.4.1, Page 79.</INFO>")
-        return_value = self.relative_move_by_pulses(direction = wf_types.Direction.CW, acceleration = 100, speed = 1000, pulses = 50000, verbose=True)
-        if verbose: Console.fancy_print("<GOOD>test relative move command sent.</GOOD>")
-
     def calibrate(self, verbose: bool = False) -> bool:
         """
         Calibrates the servo motor.
@@ -205,7 +137,159 @@ class Servo42dModbus:
         if response == command: return True
         else: return False
 
+    def set_working_current(self, working_current_ma: wf_types.uint_16, verbose: bool = False) -> bool:
+        """
+        Set the working current for the servo motor.
+        Args:
+            working_current_ma (wf_types.uint_16): The working current in milliamps.
+                Must be between 0 and 3000 mA for the SERVO42D motor.
+            verbose (bool, optional): Enable verbose output for debugging. Defaults to False.
+        Returns:
+            bool: True if the current was successfully set, False otherwise.
+        Raises:
+            TypeError: If working_current_ma is not a valid uint_16 or verbose is not a boolean.
+            ValueError: If working_current_ma is outside the valid range of 0-3000 mA.
+        Note:
+            Based on MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.7, Page 61.
+            The valid range is specific to the SERVO42D model and may differ for other models.
+        """
+
+        # Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.7, Page 61.
+
+        # Type check parameters.
+        if not TypeCheck.is_uint16(working_current_ma): raise TypeError("working_current must be a valid uint_16.")
+        if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean.")
+
+        # Check the valid range for working current. According to the manual, it should be between 0 and 3000 mA for the SERVO42D.
+        # Its higher for the SERVO57D but we're focusing on the 42D here. Room for future expansion.
+        # Values below 250 mA may not be effective for operation.
+        if working_current_ma < 250 or working_current_ma > 3000:
+            raise ValueError("working_current must be between 250 and 3000 mA.")
+
+        # Write to register.
+        command, response = self.modbus.write_single_register(
+            slave_address = self.slave_address,
+            register_address = 0x0083,
+            register_value = working_current_ma,
+            verbose = verbose
+        )
+
+        # Check response.
+        if response == command: return True
+        else: return False
+
+    def set_holding_current_percentage(self, holding_current_percentage: wf_types.HoldCurrentPercentage, verbose: bool = False) -> bool:
+        """
+        Set the holding current percentage for the servo motor.
+        This method writes to register 0x0083 to configure the holding current as a percentage
+        of the rated current. The holding current is the current supplied to the motor when
+        it is stationary to maintain position.
+        Args:
+            holding_current_percentage (wf_types.HoldCurrentPercentage): The holding current 
+                percentage enum value to set.
+            verbose (bool, optional): If True, enables verbose output for debugging. 
+                Defaults to False.
+        Returns:
+            bool: True if the command was successfully executed (response matches command),
+                False otherwise.
+        Raises:
+            TypeError: If holding_current_percentage is not a valid HoldCurrentPercentage enum
+                or if verbose is not a boolean.
+        Note:
+            Refer to MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.8, Page 61 for
+            detailed documentation.
+        """
+        
+        # Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.8, Page 61.
+
+        # Type check parameters.
+        if not TypeCheck.is_enum(holding_current_percentage, wf_types.HoldCurrentPercentage): raise TypeError("holding_current_percentage must be a valid HoldCurrentPercentage enum.")
+        if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean.")
+
+        # Write to register.
+        command, response = self.modbus.write_single_register(
+            slave_address = self.slave_address,
+            register_address = 0x0083,
+            register_value = holding_current_percentage.value,
+            verbose = verbose
+        )
+
+        # Check response.
+        if response == command: return True
+        else: return False
+
+    def setup_routine(self, verbose = True) -> bool:
+        """
+        This routine is for getting you to a known baseline that'll enable proper operation.
+        Before running this routine:
+        1. Via the controllers onboard screen, select "Restore" (factory reset) and reset controller.
+        2. Via the controllers onboard screen, select "Cal" to perform a calibration.
+        3. Via the controllers onboard screen, select "MB_RTU" and set to enable.
+        4. Run this routine.
+
+        Performing these steps will put your motor controller into a known state for the setup routine.
+        If you need to abort the routine to do these tasks, press Ctrl + C to interrupt this script.
+        """
+
+        # Calibrate servo. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.5, Page 60.
+        #if verbose: Console.fancy_print("<INFO>\ncalibrating motor (required for SR_CLOSE mode)... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.5, Page 60.</INFO>")
+        #return_value = self.calibrate(verbose=True)
+        #if verbose:
+        #    if return_value: Console.fancy_print("<GOOD>Calibration command sent. Wait for device to finish.</GOOD>")
+        #    else: Console.fancy_print("<BAD>Failed to send calibration command.</BAD>")
+        #time.sleep(15)  # Wait 15 seconds for calibration to complete.
+
+        # Disable the enable pin. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.10, Page 63.
+        if verbose: Console.fancy_print("<INFO>\ndisabling enable pin... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.10, Page 63.</INFO>")
+        return_value = self.disable_enable_pin(verbose=True)
+        if verbose:
+            if return_value: Console.fancy_print("<GOOD>enable pin disabled.</GOOD>")
+            else: Console.fancy_print("<BAD>failed to disable enable pin.</BAD>")
+
+        # Read the enable status. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.1.7, Page 58.
+        if verbose: Console.fancy_print("<INFO>\nreading enable status... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.1.7, Page 58.</INFO>")
+        return_value = self.read_en_pin_status(verbose=True)
+        if verbose:
+            if return_value: Console.fancy_print("<GOOD>enabled.</GOOD>")
+            else: Console.fancy_print("<BAD>disabled.</BAD>")
+
+        # Set workmode to SR_CLOSE. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.6, Page 61.
+        if verbose: Console.fancy_print("<INFO>\nsetting workmode to SR_CLOSE... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.6, Page 61.</INFO>")
+        return_value = self.set_work_mode(wf_types.WorkMode.SR_CLOSE, verbose=True)
+        if verbose:
+            if return_value: Console.fancy_print("<GOOD>workmode set to SR_CLOSE.</GOOD>")
+            else: Console.fancy_print("<BAD>failed to set workmode to SR_CLOSE.</BAD>")
+
+        # Enable serial mode motor control. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.20, Page 67.
+        if verbose: Console.fancy_print("<INFO>\nallowing serial control of motor... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.20, Page 67.</INFO>")
+        return_value = self.set_serial_mode_motor_enable(wf_types.EnableDisable.ENABLE, verbose=True)
+        if verbose:
+            if return_value: Console.fancy_print("<GOOD>serial control enabled.</GOOD>")
+            else: Console.fancy_print("<BAD>failed to enable serial control.</BAD>")
+
+        # Clear motor protection. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.13, Page 64.
+        if verbose: Console.fancy_print("<INFO>\nclearing motor protection... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.13, Page 64.</INFO>")
+        return_value = self.clear_motor_protection(verbose=True)
+        if verbose:
+            if return_value: Console.fancy_print("<GOOD>motor protection cleared.</GOOD>")
+            else: Console.fancy_print("<BAD>failed to clear motor protection.</BAD>")
+
+        # Read the motor shaft protection status. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.1.9, Page 58.
+        if verbose: Console.fancy_print("<INFO>\nreading motor shaft protection status... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.1.9, Page 58.</INFO>")
+        return_value = self.read_motor_shaft_protection_status(verbose=True)
+        if verbose:
+            if not return_value: Console.fancy_print("<GOOD>disabled.</GOOD>")
+            else: Console.fancy_print("<BAD>enabled.</BAD>")
+
+        # Perform a relative move by pulses to verify communication. Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.3.4.1, Page 79.
+        if verbose: Console.fancy_print("<INFO>\nperforming test relative move by pulses... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.3.4.1, Page 79.</INFO>")
+        return_value = self.relative_move_by_pulses(direction = wf_types.Direction.CW, acceleration = 100, speed = 1000, pulses = 50000, verbose=True)
+        if verbose: Console.fancy_print("<GOOD>test relative move command sent.</GOOD>")
+
     # endregion
+
+
+    # region: Needs cleanup------------------------------------------------------------------------------------------------------
 
     def read_en_pin_status(self, verbose: bool = False) -> bool:
         # Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.1.7, Page 58.
@@ -458,8 +542,3 @@ class Servo42dModbus:
                 return False
             
 # endregion
-
-if __name__ == "__main__":
-     
-     Console.clear()
-     servo = Servo42dModbus(com_port='COM4', slave_address=1, execute_setup_routine=True)
