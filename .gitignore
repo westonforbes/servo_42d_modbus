@@ -1,4 +1,17 @@
+# Virtual Environment
 /venv
+
+/__pycache__
+
+# Ignore all .pyc files everywhere
+**/*.pyc
+*.cpython-*.pyc
+
+# Additionally, the standard .gitignore for Python usually includes:
+# *.so
+# *.dll
+# *.dylib
+
 servo.py
-__pycache__/
-*.pyc  
+__pycache__/wf_servo.cpython-313.pyc
+__pycache__/servo.cpython-313.pyc

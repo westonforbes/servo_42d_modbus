@@ -442,8 +442,8 @@ class Servo42dModbus:
         # Generate expected response packets for status verification.
         expected_packet_enabled = bytearray([self.slave_address, 0x04, 0x02, 0x00, 0x01]) # Value 0x01 for enabled
         expected_packet_disabled = bytearray([self.slave_address, 0x04, 0x02, 0x00, 0x00]) # Value 0x00 for disabled
-        expected_packet_enabled.extend(Modbus._calculate_modbus_crc(expected_packet_enabled))
-        expected_packet_disabled.extend(Modbus._calculate_modbus_crc(expected_packet_disabled))
+        expected_packet_enabled.extend(Modbus.calculate_modbus_crc(expected_packet_enabled))
+        expected_packet_disabled.extend(Modbus.calculate_modbus_crc(expected_packet_disabled))
         
         # Check response and extract shaft protection status.
         response_ba = bytearray(response)

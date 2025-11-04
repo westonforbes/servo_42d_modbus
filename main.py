@@ -23,8 +23,10 @@ while True:
         "relative move 90 degrees CW (negative)",
         "relative move 90 degrees CCW (positive)",
         "relative move 360 degrees CCW (positive)",
-        "move at speed for 10 seconds",
+        "move at speed for 5 seconds",
+        "read motor shaft protection status",
         "read encoder value",
+        "reset",
         "exit"
     ]
     int_selection, str_selection = Console.integer_only_menu_with_validation("main menu", menu_options, "select an option: ")
@@ -73,10 +75,10 @@ while True:
         Console.fancy_print("<GOOD>move completed.</GOOD>")
         Console.press_enter_pause()
 
-    elif str_selection == "move at speed for 10 seconds":
-        Console.fancy_print("<INFO>moving at speed for 10 seconds...</INFO>")
+    elif str_selection == "move at speed for 5 seconds":
+        Console.fancy_print("<INFO>moving at speed for 5 seconds...</INFO>")
         servo.move_at_speed(direction=wf_types.Direction.CCW, acceleration=100, speed=2000, verbose=True)
-        for i in range(10, 0, -1):
+        for i in range(5, 0, -1):
             Console.clear()
             Console.fancy_print(f"<INFO>time remaining: {i} seconds...</INFO>")
             time.sleep(1)
@@ -87,6 +89,20 @@ while True:
     elif str_selection == "read encoder value":
         Console.fancy_print("<INFO>reading encoder value...</INFO>")
         encoder_value = servo.read_encoder_value(verbose=True)
+        Console.press_enter_pause()
+
+    elif str_selection == "read motor shaft protection status":
+        Console.fancy_print("<INFO>reading motor shaft protection status...</INFO>")
+        status = servo.read_motor_shaft_protection_status(verbose=True)
+        Console.press_enter_pause()
+
+    elif str_selection == "reset":
+        Console.fancy_print("<INFO>resetting controller...</INFO>")
+        result = servo.restart(verbose=True)
+        if result:
+            Console.fancy_print("<GOOD>controller reset.</GOOD>")
+        else:
+            Console.fancy_print("<BAD>controller reset failed.</BAD>")
         Console.press_enter_pause()
 
     elif str_selection == "exit":
