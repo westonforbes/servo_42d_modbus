@@ -9,13 +9,13 @@ class Modbus:
     slave_address: int
     serial_connection: serial.Serial
 
-    def __init__(self, slave_address, com_port: str, timeout: float = 1.0):
+    def __init__(self, slave_address, com_port: str, timeout: float = .05):
         
         # Set slave address.
         self.slave_address = slave_address
 
         # Open serial connection.
-        try: self.serial_connection = self._open_serial_connection(port=com_port)
+        try: self.serial_connection = self._open_serial_connection(port=com_port, timeout=timeout)
         except Exception as e: raise e
 
     def read_holding_registers(self, slave_address: wf_types.uint_8, starting_address: wf_types.uint_16, register_quantity: wf_types.uint_16, verbose: bool = False) -> tuple[list[int], list[int]]:

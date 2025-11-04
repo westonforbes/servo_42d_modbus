@@ -294,7 +294,7 @@ class Servo42dModbus:
     def set_zero(self, verbose: bool = False) -> bool:
 
         # Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.19, Page 66.
-        if verbose: Console.fancy_print("<INFO>\nsetting work mode... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.19, Page 66.</INFO>")
+        if verbose: Console.fancy_print("<INFO>\nsetting zero... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.19, Page 66.</INFO>")
 
         # Type check parameters.
         if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean.")
@@ -897,7 +897,7 @@ class Servo42dModbus:
 # endregion
 
     # region: Work region--------------------------------------------------------------------------------------------------------
-
+    
     def read_encoder_value(self, verbose: bool = False) -> int:
 
         if verbose: Console.fancy_print("<INFO>\nreading encoder rotations and degrees... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.1.1, Page 55.</INFO>")
@@ -917,64 +917,45 @@ class Servo42dModbus:
         byte_4 = response[7]
         byte_5 = response[8]
 
-        # Convert to int48 (signed).
-        encoder_pulse_count = Parse.parse_int48(byte_0, byte_1, byte_2, byte_3, byte_4, byte_5)
+        # Convert response to int48 (signed).
+        encoder_count = Parse.parse_int48(byte_0, byte_1, byte_2, byte_3, byte_4, byte_5)
 
+        # There are 16384 units per rotation (0x4000).
+        # Split into rotations and degrees.
+        quotient, remainder = divmod(float(encoder_count), 16384.0)
+        # Rotations is integer part of quotient, its good as is.
+        rotations = quotient
+        # Degrees is remainder converted to degrees.
+        degrees = remainder * (360.0 / 16384.0)
 
-        # Get the positioning error.
-        command, response = self.modbus.read_input_registers(
+        if verbose: Console.fancy_print(f"<GOOD>encoder location (units): {encoder_count}</GOOD>")
+        if verbose: Console.fancy_print(f"<GOOD>rotations: {rotations}</GOOD>")
+        if verbose: Console.fancy_print(f"<GOOD>angle (degrees): {degrees}</GOOD>")
+
+    def move_at_speed(self, direction: wf_types.Direction, acceleration: wf_types.uint_8, speed: wf_types.uint_16, verbose: bool = False) -> bool:
+
+        # Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.3.3.1, Page 77.
+        if verbose: Console.fancy_print("<INFO>\nsending move at speed command... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.3.3.1, Page 77.</INFO>")
+
+        # Type check parameters.
+        if not TypeCheck.is_enum(direction, wf_types.Direction): raise TypeError("direction must be a valid Direction enum.")
+        if not TypeCheck.is_uint8(acceleration): raise TypeError("acceleration must be an unsigned 8-bit integer (0-255).")
+        if not TypeCheck.is_uint16(speed): raise TypeError("speed must be an unsigned 16-bit integer (0-65535).")
+        if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean.")
+
+        command, response = self.modbus.write_multiple_registers(
             slave_address = self.slave_address,
-            starting_address = 0x0039,
+            starting_address = 0x00F6,
             register_quantity = 0x0002,
+            byte_quantity=0x04,
+            payload = [
+                direction.value,
+                acceleration,
+                (speed >> 8) & 0xFF,
+                speed & 0xFF
+            ],
             verbose = verbose
         )
 
-        byte_0 = response[3]
-        byte_1 = response[4]
-        byte_2 = response[5]
-        byte_3 = response[6]
-        
-        # Convert to int32 (signed).
-        error_pulses = Parse.parse_int32(byte_0, byte_1, byte_2, byte_3)
-
-
-        target_pulse_count = encoder_pulse_count + error_pulses
-        target_angle = target_pulse_count / 0x4000
-        error = float(error_pulses) / (51200.0/360.0)
-        quotient, remainder = divmod(encoder_pulse_count, 0x4000)
-        rotations = quotient
-        degrees = (remainder * 360.0) / 0x4000
-
-        if verbose: Console.fancy_print(f"<GOOD>target location (pulses): {target_pulse_count}</GOOD>")
-        if verbose: Console.fancy_print(f"<GOOD>encoder location (pulses): {encoder_pulse_count}</GOOD>")
-        if verbose: Console.fancy_print(f"<GOOD>positioning error (pulses): {error_pulses}</GOOD>")
-        if verbose: Console.fancy_print(f"<GOOD>target angle (degrees): {target_angle}</GOOD>")
-        if verbose: Console.fancy_print(f"<GOOD>rotations: {rotations}</GOOD>")
-        if verbose: Console.fancy_print(f"<GOOD>angle (degrees): {degrees}</GOOD>")
-        if verbose: Console.fancy_print(f"<GOOD>positioning error (degrees): {error}</GOOD>")
-
-        
-
     # endregion
 
-if __name__ == "__main__":
-
-    Console.clear()
-    # Example usage of the Servo42dModbus class.
-    servo = Servo42dModbus(com_port="COM4", slave_address=1)
-    
-    
-    #servo.setup_routine(verbose=True)
-    Console.fancy_print("<BAD>\n\nabout to start movement. </BAD>")
-    Console.press_enter_pause()
-    
-    
-    import time
-    servo.set_zero(verbose=True)
-    time.sleep(1)
-    servo.relative_move_by_degrees(direction=wf_types.Direction.CCW, acceleration=100, speed=1000, degrees=360.0, verbose=True)
-    time.sleep(4)
-    #servo.read_encoder_value(verbose=True)
-    #servo.relative_move_by_degrees(direction=wf_types.Direction.CCW, acceleration=100, speed=1000, degrees=80.0, verbose=True)
-    #time.sleep(4)
-    servo.read_encoder_value(verbose=True)
