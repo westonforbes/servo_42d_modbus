@@ -1,6 +1,7 @@
 import wf_servo
 from wf_console import Console
 import wf_types
+import time
 
 Console.clear()
 Console.fancy_print("<INFO>servo 42d modbus test</INFO>")
@@ -22,6 +23,7 @@ while True:
         "relative move 90 degrees CW (negative)",
         "relative move 90 degrees CCW (positive)",
         "relative move 360 degrees CCW (positive)",
+        "move at speed for 10 seconds",
         "read encoder value",
         "exit"
     ]
@@ -71,10 +73,20 @@ while True:
         Console.fancy_print("<GOOD>move completed.</GOOD>")
         Console.press_enter_pause()
 
+    elif str_selection == "move at speed for 10 seconds":
+        Console.fancy_print("<INFO>moving at speed for 10 seconds...</INFO>")
+        servo.move_at_speed(direction=wf_types.Direction.CCW, acceleration=100, speed=2000, verbose=True)
+        for i in range(10, 0, -1):
+            Console.clear()
+            Console.fancy_print(f"<INFO>time remaining: {i} seconds...</INFO>")
+            time.sleep(1)
+        servo.move_at_speed(direction=wf_types.Direction.CCW, acceleration=255, speed=0, verbose=True)
+        Console.fancy_print("<GOOD>move completed.</GOOD>")
+        Console.press_enter_pause()
+
     elif str_selection == "read encoder value":
         Console.fancy_print("<INFO>reading encoder value...</INFO>")
         encoder_value = servo.read_encoder_value(verbose=True)
-        Console.fancy_print(f"<GOOD>encoder value: {encoder_value}</GOOD>")
         Console.press_enter_pause()
 
     elif str_selection == "exit":
