@@ -19,8 +19,9 @@ while True:
     menu_options = [
         "run setup routine",
         "set zero",
-        "relative move 90 degrees CW",
-        "relative move 90 degrees CCW",
+        "relative move 90 degrees CW (negative)",
+        "relative move 90 degrees CCW (positive)",
+        "relative move 360 degrees CCW (positive)",
         "read encoder value",
         "exit"
     ]
@@ -52,15 +53,21 @@ while True:
         Console.fancy_print("<GOOD>zero set.</GOOD>")
         Console.press_enter_pause()
 
-    elif str_selection == "relative move 90 degrees CW":
+    elif str_selection == "relative move 90 degrees CW (negative)":
         Console.fancy_print("<INFO>moving 90 degrees CW...</INFO>")
         servo.relative_move_by_degrees(direction=wf_types.Direction.CW, acceleration=100, speed=1000, degrees=90.0, verbose=True)
         Console.fancy_print("<GOOD>move completed.</GOOD>")
         Console.press_enter_pause()
 
-    elif str_selection == "relative move 90 degrees CCW":
+    elif str_selection == "relative move 90 degrees CCW (positive)":
         Console.fancy_print("<INFO>moving 90 degrees CCW...</INFO>")
         servo.relative_move_by_degrees(direction=wf_types.Direction.CCW, acceleration=100, speed=1000, degrees=90.0, verbose=True)
+        Console.fancy_print("<GOOD>move completed.</GOOD>")
+        Console.press_enter_pause()
+
+    elif str_selection == "relative move 360 degrees CCW (positive)":
+        Console.fancy_print("<INFO>moving 360 degrees CCW...</INFO>")
+        servo.relative_move_by_degrees(direction=wf_types.Direction.CCW, acceleration=100, speed=1000, degrees=360.0, verbose=True)
         Console.fancy_print("<GOOD>move completed.</GOOD>")
         Console.press_enter_pause()
 

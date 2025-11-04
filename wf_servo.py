@@ -40,33 +40,188 @@ class Servo42dModbus:
 
     # region: Functions that are complete, commented, parameter sanitized and rock-solid-----------------------------------------
 
-    def calibrate(self, verbose: bool = False) -> bool:
+    def read_encoder_value(self, verbose: bool = False) -> tuple:
         """
-        Calibrates the servo motor.
-                
-        Args:
-            verbose (bool, optional): If True, prints detailed Modbus communication. Defaults to False.
-                    
-        Returns:
-            bool: True if calibration command was successfully sent, False otherwise.
-                
-        Raises:
-            TypeError: If verbose is not a boolean.    
+        #### Description:
+        Read the current encoder value.
+       
+        #### Args:
+            verbose (bool, optional)
+        
+        #### Returns:
+            tuple: A tuple containing:
+                - encoder_count (int): Raw encoder count value (signed 48-bit integer).
+                - total_degrees (float): Total angle in degrees from zero position.
+                - rotations (int): Number of complete 360-degree rotations.
+                - remaining_degrees (float): Remaining degrees after complete rotations.
+        
+        #### Raises:
+            TypeError: If verbose parameter is not a boolean.
+            RuntimeError: If reading encoder value fails.
+        
+        #### Documentation:
+            MKS SERVO42D RS485 User Manual V1.0.6, Section 8.1.2, Page 55.
+
+        #### Last Revision:
+            2025-11-04 11:15 AM ET, Weston Forbes
         """
 
-        # Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.5, Page 60.
-        if verbose: Console.fancy_print("<INFO>\ncalibrating motor... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.5, Page 60.</INFO>")
+        # Type check parameter.
+        if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean.")
+
+        # Create a empty response list.
+        response = []
+
+        # Try protect...
+        try:
+
+            # Get the encoder reading.
+            command, response = self.modbus.read_input_registers(
+                slave_address = self.slave_address,
+                starting_address = 0x0031,
+                register_quantity = 0x0003,
+                response_length = 11,
+                verbose = verbose
+            )
+
+        except Exception as e:
+            if verbose: Console.fancy_print(f"<BAD>failed to read encoder value from servo: {e}</BAD>")
+            raise RuntimeError(f"failed to read encoder value from servo: {e}")
+
+        # Convert response to int48 (signed).
+        encoder_count = Parse.parse_int48(response[3], response[4], response[5], response[6], response[7], response[8])
+
+        # There are 16384 units per 360 degrees (0x4000).
+        # Split into rotations and degrees.
+        total_degrees = (360.0/16384.0) * encoder_count
+        rotations, remaining_degrees = divmod(total_degrees, 360.0)
+        rotations = int(rotations)
+
+        if verbose:
+            Console.fancy_print( "<INFO>reading encoder rotations and degrees...</INFO>")
+            Console.fancy_print(f"<INFO>encoder location (units): {encoder_count}</INFO>")
+            Console.fancy_print(f"<INFO>total angle (degrees): {total_degrees}</INFO>")
+            Console.fancy_print(f"<INFO>rotations: {rotations}, degrees: {remaining_degrees}</INFO>")
+
+        return encoder_count, total_degrees, rotations, remaining_degrees
+
+    def move_at_speed(self, direction: wf_types.Direction, acceleration: wf_types.uint_8, speed: wf_types.uint_16, verbose: bool = False) -> bool:
+        """
+        #### Description:
+        Move the motor at a specified speed and acceleration in a given direction.
+
+        #### Args:
+            direction (wf_types.Direction): The direction to move the motor (CW or CCW).
+            acceleration (wf_types.uint_8): The acceleration value (0-255).
+            speed (wf_types.uint_16): The speed value (0-65535).
+            verbose (bool, optional): If True, prints detailed Modbus communication. Defaults to False.
+        
+        #### Raises:
+            TypeError: If any parameter is of incorrect type.
+            RuntimeError: If sending move command fails.
+
+        #### Returns:
+            bool: True if move command was successfully sent, False otherwise.
+
+        #### Documentation:
+            MKS SERVO42D RS485 User Manual V1.0.6, Section 8.3.3.1, Page 77.
+
+        #### Last Revision:
+            2025-11-04 11:31 AM ET, Weston Forbes
+        """
+
+        if verbose: Console.fancy_print("<INFO>sending move at speed command...</INFO>")
+
+        # Type check parameters.
+        if not TypeCheck.is_enum(direction, wf_types.Direction): raise TypeError("direction must be a valid Direction enum.")
+        if not TypeCheck.is_uint8(acceleration): raise TypeError("acceleration must be an unsigned 8-bit integer (0-255).")
+        if not TypeCheck.is_uint16(speed): raise TypeError("speed must be an unsigned 16-bit integer (0-65535).")
+        if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean.")
+
+        # Create a empty response list.
+        response = []
+        
+        # Try protect...
+        try:
+
+            # Command the motor to move.
+            command, response = self.modbus.write_multiple_registers(
+                slave_address = self.slave_address,
+                starting_address = 0x00F6,
+                register_quantity = 0x0002,
+                byte_quantity=0x04,
+                payload = [
+                    direction.value,
+                    acceleration,
+                    (speed >> 8) & 0xFF,
+                    speed & 0xFF
+                ],
+                response_length=8,
+                verbose = verbose
+            )
+
+        # Catch exceptions.
+        except Exception as e:
+            if verbose: Console.fancy_print(f"<BAD>exception occurred while sending move at speed command: {e}</BAD>")
+            raise RuntimeError(f"exception occurred while sending move at speed command: {e}")
+
+        # Calculate expected response for verification.
+        expected_response = Modbus.calculate_modbus_crc([self.slave_address, 0x10, 0x00, 0xF6, 0x00, 0x02])
+
+        # Verify response.
+        if response == expected_response:
+            if verbose: Console.fancy_print("<GOOD>move at speed command sent successfully.</GOOD>")
+            return True
+        else:
+            if verbose: Console.fancy_print("<BAD>failed to send move at speed command.</BAD>")
+            return False
+        
+    def calibrate(self, verbose: bool = False) -> bool:
+        """
+        #### Description:
+        Calibrates the motor. Calibration should be performed with no load on motor.
+                
+        #### Args:
+            verbose (bool, optional)
+
+        #### Returns:
+            bool: True if calibration command was successfully sent, False otherwise.
+                
+        #### Raises:
+            TypeError: If verbose is not a boolean.
+            RuntimeError: If sending calibration command fails.
+
+        #### Documentation:
+            MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.5, Page 60.
+
+        #### Last Revision:
+            2025-11-04 11:37 AM ET, Weston Forbes 
+        """
+
+        if verbose: Console.fancy_print("<INFO>\ncalibrating motor...</INFO>")
                 
         # Type check parameter.
         if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean.")
 
-        # Write to register.
-        command, response = self.modbus.write_single_register(
-            slave_address = self.slave_address,
-            register_address = 0x0080,
-            register_value = 0x0001,
-            verbose = verbose
-        )
+        # Create a empty response list.
+        response = []
+        
+        # Try protect...
+        try:
+
+            # Write to register.
+            command, response = self.modbus.write_single_register(
+                slave_address = self.slave_address,
+                register_address = 0x0080,
+                register_value = 0x0001,
+                response_length= 8,
+                verbose = verbose
+            )
+        
+        # Catch exceptions.
+        except Exception as e:
+            if verbose: Console.fancy_print(f"<BAD>exception occurred while attempting calibration: {e}</BAD>")
+            raise RuntimeError(f"exception occurred while attempting calibration: {e}")
 
         # Check response.
         if response == command: 
@@ -78,29 +233,50 @@ class Servo42dModbus:
 
     def clear_motor_protection(self, verbose: bool = False) -> bool:
             """
-            Clear motor protection on the servo motor.
-            Args:
+            #### Description:
+            Clear motor protection on the motor. This is typically done after a 
+            fault or error state to allow motor operation to resume.
+                    
+            #### Args:
                 verbose (bool, optional)
-            Returns:
-                bool: True if motor protection was cleared successfully (response matches
-                    command), False otherwise.
-            Raises:
+
+            #### Returns:
+                bool: True if motor protection was cleared successfully, False otherwise.
+                    
+            #### Raises:
                 TypeError: If verbose parameter is not a boolean.
+                RuntimeError: If sending the clear protection command fails.
+
+            #### Documentation:
+                MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.13, Page 64.
+
+            #### Last Revision:
+                2025-11-04 11:44 AM ET, Weston Forbes
             """
 
-            # Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.13, Page 64.
-            if verbose: Console.fancy_print("<INFO>\nclearing motor protection... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.13, Page 64.</INFO>")
+            if verbose: Console.fancy_print("<INFO>\nclearing motor protection...</INFO>")
 
             # Type check parameter.
             if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean.")
 
-            # Write to register.
-            command, response = self.modbus.write_single_register(
-                slave_address = self.slave_address,
-                register_address = 0x0088,
-                register_value = 0x0000,
-                verbose = verbose
-            )
+            # Create an empty response list.
+            response = []
+            
+            # Try protect...
+            try:
+                # Write to register.
+                command, response = self.modbus.write_single_register(
+                    slave_address = self.slave_address,
+                    register_address = 0x0088,
+                    register_value = 0x0000,
+                    response_length= 8,
+                    verbose = verbose
+                )
+            
+            # Catch exceptions.
+            except Exception as e:
+                if verbose: Console.fancy_print(f"<BAD>exception occurred while attempting to clear motor protection: {e}</BAD>")
+                raise RuntimeError(f"exception occurred while attempting to clear motor protection: {e}")
 
             # Check response. A successful write echoes the command.
             if response == command: 
@@ -109,31 +285,53 @@ class Servo42dModbus:
             else: 
                 if verbose: Console.fancy_print("<BAD>failed to clear motor protection.</BAD>")
                 return False
-
+    
     def disable_enable_pin(self, verbose: bool = False) -> bool:
             """
-            Disable the enable pin functionality on the servo motor.
-            Args:
+            #### Description:
+            Disables the physical enable pin functionality on the controller.
+                    
+            #### Args:
                 verbose (bool, optional)
-            Returns:
-                bool: True if the register write was successful (response matches command), False otherwise.
-            Raises:
+
+            #### Returns:
+                bool: True if the register write was successful (response matches command), 
+                    False otherwise.
+                    
+            #### Raises:
                 TypeError: If verbose parameter is not a boolean.
+                RuntimeError: If sending the disable command fails (e.g., Modbus communication error).
+
+            #### Documentation:
+                MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.10, Page 63.
+
+            #### Last Revision:
+                2025-11-04 11:50 AM ET, Weston Forbes
             """
             
-            # Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.10, Page 63.
-            if verbose: Console.fancy_print("<INFO>\ndisabling enable pin... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.10, Page 63.</INFO>")
+            if verbose: Console.fancy_print("<INFO>\ndisabling enable pin...</INFO>")
 
             # Type check parameter.
             if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean.")
 
-            # Write to register.
-            command, response = self.modbus.write_single_register(
-                slave_address = self.slave_address,
-                register_address = 0x0085,
-                register_value = 0x0002, # Board always active.
-                verbose = verbose
-            )
+            # Create an empty response list.
+            response = []
+            
+            # Try protect...
+            try:
+                # Write to register (0x0085 with value 0x0002 for 'Board always active').
+                command, response = self.modbus.write_single_register(
+                    slave_address = self.slave_address,
+                    register_address = 0x0085,
+                    register_value = 0x0002, # Value 0x0002 sets board to always be active (i.e., disables the physical enable pin).
+                    response_length= 8,
+                    verbose = verbose
+                )
+
+            # Catch exceptions.
+            except Exception as e:
+                if verbose: Console.fancy_print(f"<BAD>exception occurred while attempting to disable enable pin: {e}</BAD>")
+                raise RuntimeError(f"exception occurred while attempting to disable enable pin: {e}")
 
             # Check response. A successful write echoes the command.
             if response == command: 
@@ -142,6 +340,19 @@ class Servo42dModbus:
             else: 
                 if verbose: Console.fancy_print("<BAD>failed to disable enable pin.</BAD>")
                 return False
+
+    # endregion
+    
+    # region: Work region--------------------------------------------------------------------------------------------------------
+
+
+    # endregion
+
+    # region: Needs cleanup------------------------------------------------------------------------------------------------------
+
+
+
+
 
     def read_en_pin_status(self, verbose: bool = False) -> bool:
         """
@@ -166,6 +377,7 @@ class Servo42dModbus:
             slave_address = self.slave_address,
             starting_address = 0x003A,
             register_quantity = 0x0001,
+            response_length = 7,
             verbose = verbose
         )
 
@@ -224,6 +436,7 @@ class Servo42dModbus:
             slave_address = self.slave_address,
             starting_address = 0x003E,
             register_quantity = 0x0001,
+            response_length = 7,
             verbose = verbose
         )
 
@@ -280,6 +493,7 @@ class Servo42dModbus:
             slave_address = self.slave_address,
             register_address = 0x0041,
             register_value = 0x0001,
+            response_length= 8,
             verbose = verbose
         )
 
@@ -293,8 +507,8 @@ class Servo42dModbus:
 
     def set_zero(self, verbose: bool = False) -> bool:
 
-        # Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.19, Page 66.
-        if verbose: Console.fancy_print("<INFO>\nsetting zero... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.19, Page 66.</INFO>")
+        # Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.19, Page 67.
+        if verbose: Console.fancy_print("<INFO>\nsetting zero... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.19, Page 67.</INFO>")
 
         # Type check parameters.
         if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean.")
@@ -304,6 +518,7 @@ class Servo42dModbus:
             slave_address = self.slave_address,
             register_address = 0x0092,
             register_value = 0x0001,
+            response_length= 8,
             verbose = verbose
         )
 
@@ -333,8 +548,8 @@ class Servo42dModbus:
                 WorkMode enum.
         """
         
-        # Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.4, Page 60.
-        if verbose: Console.fancy_print("<INFO>\nsetting work mode... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.4, Page 60.</INFO>")
+        # Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.6, Page 61.
+        if verbose: Console.fancy_print("<INFO>\nsetting work mode... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.2.6, Page 61.</INFO>")
 
         # Type check parameters.
         if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean.")
@@ -345,6 +560,7 @@ class Servo42dModbus:
             slave_address = self.slave_address,
             register_address = 0x0082,
             register_value = work_mode.value,
+            response_length= 8,
             verbose = verbose
         )
 
@@ -382,6 +598,7 @@ class Servo42dModbus:
             slave_address = self.slave_address,
             register_address = 0x00 << 8 | 0xF3,
             register_value = 0x00 << 8 | enable_disable.value,
+            response_length= 8,
             verbose = verbose
         )
 
@@ -427,6 +644,7 @@ class Servo42dModbus:
             slave_address = self.slave_address,
             register_address = 0x009B,
             register_value = holding_current_percentage.value,
+            response_length= 8,
             verbose = verbose
         )
 
@@ -453,6 +671,7 @@ class Servo42dModbus:
             slave_address = self.slave_address,
             register_address = 0x0084,
             register_value = microsteps,
+            response_length = 8,
             verbose = verbose
         )
 
@@ -502,6 +721,7 @@ class Servo42dModbus:
             slave_address = self.slave_address,
             register_address = 0x0083,
             register_value = working_current_ma,
+            response_length = 8,
             verbose = verbose
         )
 
@@ -557,6 +777,7 @@ class Servo42dModbus:
             slave_address = self.slave_address,
             starting_address = 0x1147,
             register_quantity = 0x0013,
+            response_length=43,
             verbose = False
         )
 
@@ -770,10 +991,6 @@ class Servo42dModbus:
         self.configuration = parameters
         return parameters
             
-    # endregion
-
-    # region: Needs cleanup------------------------------------------------------------------------------------------------------
-
     def relative_move_by_degrees(self, direction: wf_types.Direction, acceleration: wf_types.uint_8, speed: wf_types.uint_16, degrees: float, verbose: bool = False) -> bool:
         
         if not TypeCheck.is_enum(direction, wf_types.Direction): raise TypeError("direction must be a valid Direction enum.")
@@ -816,6 +1033,7 @@ class Servo42dModbus:
                 (pulses >> 8* 1) & 0xFF,     # Byte 6 (Pulse DWord Byte 1)
                 pulses & 0xFF               # Byte 7 (Pulse DWord Byte 0)
             ],
+            response_length= 8,
             verbose = verbose
         )
 
@@ -828,134 +1046,7 @@ class Servo42dModbus:
             if verbose: Console.fancy_print("<BAD>failed to send relative move by pulses command.</BAD>")
             return False
 
-    """
-    def set_homing_parameters(self, 
-                                trigger_level: wf_types.TriggerLevel, 
-                                direction: wf_types.Direction, 
-                                speed: wf_types.uint_16, 
-                                endlimit_enable: wf_types.EnableDisable, 
-                                verbose: bool = False) -> bool:
-
-
-            # Type check parameters.
-            if not TypeCheck.is_enum(trigger_level, wf_types.TriggerLevel): raise TypeError("trigger_level must be a valid TriggerLevel enum.")
-            if not TypeCheck.is_enum(direction, wf_types.Direction): raise TypeError("direction must be a valid Direction enum.")
-            if not TypeCheck.is_uint16(speed): raise TypeError("speed must be an unsigned 16-bit integer (0-65535).")
-            if not TypeCheck.is_enum(endlimit_enable, wf_types.EnableDisable): raise TypeError("endlimit_enable must be a valid EnableDisable enum.")
-            if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean.")
-
-            # This command writes 3 registers (6 bytes)
-            # REG 0x0090: [hmTrig (HI), hmDir (LO)]
-            # REG 0x0091: [HmSpeed (HI), HmSpeed (LO)]
-            # REG 0x0092: [NULL (HI), EndLimit (LO)]
-            
-            command, response = self.modbus.write_multiple_registers(
-                slave_address = self.slave_address,
-                starting_address = 0x0090,
-                register_quantity = 0x0003,
-                byte_quantity = 0x0006,
-                payload = [
-                    trigger_level.value & 0xFF,  # REG 0x90 HI: HmTrig (0=Low, 1=High)
-                    direction.value & 0xFF,      # REG 0x90 LO: HmDir (0=CW, 1=CCW)
-                    (speed >> 8) & 0xFF,         # REG 0x91 HI: HmSpeed
-                    speed & 0xFF,                # REG 0x91 LO: HmSpeed
-                    0x00,                        # REG 0x92 HI: NULL (Reserved)
-                    endlimit_enable.value & 0xFF # REG 0x92 LO: EndLimit (0=Disable, 1=Enable)
-                ],
-                verbose = verbose
-            )
-
-            # A successful write_multiple_registers response echoes the start address and quantity
-            # Expected: [Slave, 0x10, 0x00, 0x90, 0x00, 0x03, CRC_HI, CRC_LO]
-            # We can just check the first 6 bytes
-            if response and response[:6] == [self.slave_address, 0x10, 0x00, 0x90, 0x00, 0x03]:
-                return True
-            else:
-                return False
-            
-    def release_stall_protection(self, verbose: bool = False) -> bool:
-
-                    
-            # Type check parameter.
-            if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean.")
-
-            # Write to register.
-            command, response = self.modbus.write_single_register(
-                slave_address = self.slave_address,
-                register_address = 0x003D,
-                register_value = 0x0001,  # 0x0001 = Release
-                verbose = verbose
-            )
-
-            # Check response. A successful write echoes the command.
-            if response == command: 
-                return True
-            else: 
-                return False
-            
-        """    
-# endregion
-
-    # region: Work region--------------------------------------------------------------------------------------------------------
-    
-    def read_encoder_value(self, verbose: bool = False) -> int:
-
-        if verbose: Console.fancy_print("<INFO>\nreading encoder rotations and degrees... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.1.1, Page 55.</INFO>")
-
-        # Get the encoder reading.
-        command, response = self.modbus.read_input_registers(
-            slave_address = self.slave_address,
-            starting_address = 0x0031,
-            register_quantity = 0x0003,
-            verbose = verbose
-        )
-
-        byte_0 = response[3]
-        byte_1 = response[4]
-        byte_2 = response[5]
-        byte_3 = response[6]
-        byte_4 = response[7]
-        byte_5 = response[8]
-
-        # Convert response to int48 (signed).
-        encoder_count = Parse.parse_int48(byte_0, byte_1, byte_2, byte_3, byte_4, byte_5)
-
-        # There are 16384 units per rotation (0x4000).
-        # Split into rotations and degrees.
-        quotient, remainder = divmod(float(encoder_count), 16384.0)
-        # Rotations is integer part of quotient, its good as is.
-        rotations = quotient
-        # Degrees is remainder converted to degrees.
-        degrees = remainder * (360.0 / 16384.0)
-
-        if verbose: Console.fancy_print(f"<GOOD>encoder location (units): {encoder_count}</GOOD>")
-        if verbose: Console.fancy_print(f"<GOOD>rotations: {rotations}</GOOD>")
-        if verbose: Console.fancy_print(f"<GOOD>angle (degrees): {degrees}</GOOD>")
-
-    def move_at_speed(self, direction: wf_types.Direction, acceleration: wf_types.uint_8, speed: wf_types.uint_16, verbose: bool = False) -> bool:
-
-        # Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.3.3.1, Page 77.
-        if verbose: Console.fancy_print("<INFO>\nsending move at speed command... Docs: MKS SERVO42D RS485 User Manual V1.0.6, Section 8.3.3.1, Page 77.</INFO>")
-
-        # Type check parameters.
-        if not TypeCheck.is_enum(direction, wf_types.Direction): raise TypeError("direction must be a valid Direction enum.")
-        if not TypeCheck.is_uint8(acceleration): raise TypeError("acceleration must be an unsigned 8-bit integer (0-255).")
-        if not TypeCheck.is_uint16(speed): raise TypeError("speed must be an unsigned 16-bit integer (0-65535).")
-        if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean.")
-
-        command, response = self.modbus.write_multiple_registers(
-            slave_address = self.slave_address,
-            starting_address = 0x00F6,
-            register_quantity = 0x0002,
-            byte_quantity=0x04,
-            payload = [
-                direction.value,
-                acceleration,
-                (speed >> 8) & 0xFF,
-                speed & 0xFF
-            ],
-            verbose = verbose
-        )
-
     # endregion
+
+
 

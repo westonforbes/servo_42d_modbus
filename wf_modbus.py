@@ -9,7 +9,7 @@ class Modbus:
     slave_address: int
     serial_connection: serial.Serial
 
-    def __init__(self, slave_address, com_port: str, timeout: float = .05):
+    def __init__(self, slave_address, com_port: str, timeout: float = 1.0):
         
         # Set slave address.
         self.slave_address = slave_address
@@ -18,7 +18,7 @@ class Modbus:
         try: self.serial_connection = self._open_serial_connection(port=com_port, timeout=timeout)
         except Exception as e: raise e
 
-    def read_holding_registers(self, slave_address: wf_types.uint_8, starting_address: wf_types.uint_16, register_quantity: wf_types.uint_16, verbose: bool = False) -> tuple[list[int], list[int]]:
+    def read_holding_registers(self, slave_address: wf_types.uint_8, starting_address: wf_types.uint_16, register_quantity: wf_types.uint_16, response_length: int, verbose: bool = False) -> tuple[list[int], list[int]]:
         """
         Read holding registers using Modbus RTU Function Code 0x03.
         
@@ -26,6 +26,7 @@ class Modbus:
             slave_address: Modbus slave device address (0-255)
             starting_address: Address of the first register to read (0-65535)
             register_quantity: Number of registers to read (1-125)
+            response_length: Expected length of the response packet
             verbose: Enable debug output
             
         Returns:
@@ -39,6 +40,7 @@ class Modbus:
         if not TypeCheck.is_uint8(slave_address): raise TypeError("slave_address must be an unsigned 8-bit integer (0-255).")
         if not TypeCheck.is_uint16(starting_address): raise TypeError("starting_address must be an unsigned 16-bit integer (0-65535).")
         if not TypeCheck.is_uint16(register_quantity): raise TypeError("register_quantity must be an unsigned 16-bit integer (0-65535).")
+        if not TypeCheck.is_uint8(response_length): raise TypeError("response_length must be an unsigned 8-bit integer (0-255).")
         if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean value (True or False).")
 
         # Function code to read holding registers.
@@ -54,19 +56,19 @@ class Modbus:
         packet.append(register_quantity & 0xFF)        # Low byte of register quantity
         
         # Calculate and append CRC.
-        crc = Modbus._calculate_modbus_crc(packet)
+        crc = Modbus.calculate_modbus_crc(packet)
         packet.extend(crc)
 
         # Convert packet to list of integers for transmission.
         command_packet = list(packet)
         
         # Send packet and receive response.
-        response_packet = self._send_and_receive_packet(command_packet=command_packet, verbose=verbose)
+        response_packet = self._send_and_receive_packet(command_packet=command_packet, response_length=response_length, verbose=verbose)
 
         # Return packets.
         return command_packet, response_packet
 
-    def read_input_registers(self, slave_address: wf_types.uint_8, starting_address: wf_types.uint_16, register_quantity: wf_types.uint_16, verbose: bool = False) -> tuple[list[int], list[int]]:
+    def read_input_registers(self, slave_address: wf_types.uint_8, starting_address: wf_types.uint_16, register_quantity: wf_types.uint_16, response_length: int, verbose: bool = False) -> tuple[list[int], list[int]]:
         """
         Read input registers using Modbus RTU Function Code 0x04.
         
@@ -74,6 +76,7 @@ class Modbus:
             slave_address: Modbus slave device address (0-255)
             starting_address: Address of the first register to read (0-65535)
             register_quantity: Number of registers to read (1-125)
+            response_length: Expected length of the response packet
             verbose: Enable debug output
             
         Returns:
@@ -87,6 +90,7 @@ class Modbus:
         if not TypeCheck.is_uint8(slave_address): raise TypeError("slave_address must be an unsigned 8-bit integer (0-255).")
         if not TypeCheck.is_uint16(starting_address): raise TypeError("starting_address must be an unsigned 16-bit integer (0-65535).")
         if not TypeCheck.is_uint16(register_quantity): raise TypeError("register_quantity must be an unsigned 16-bit integer (0-65535).")
+        if not TypeCheck.is_uint8(response_length): raise TypeError("response_length must be an unsigned 8-bit integer (0-255).")
         if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean value (True or False).")
 
         # Function code to read input registers.
@@ -102,19 +106,19 @@ class Modbus:
         packet.append(register_quantity & 0xFF)        # Low byte of register quantity
         
         # Calculate and append CRC.
-        crc = Modbus._calculate_modbus_crc(packet)
+        crc = Modbus.calculate_modbus_crc(packet)
         packet.extend(crc)
 
         # Convert packet to list of integers for transmission.
         command_packet = list(packet)
         
         # Send packet and receive response.
-        response_packet = self._send_and_receive_packet(command_packet=command_packet, verbose=verbose)
+        response_packet = self._send_and_receive_packet(command_packet=command_packet, response_length=response_length, verbose=verbose)
 
         # Return packets.
         return command_packet, response_packet
 
-    def write_single_register(self, slave_address: wf_types.uint_8, register_address: wf_types.uint_16, register_value: wf_types.uint_16, verbose: bool = False) -> list[int]:
+    def write_single_register(self, slave_address: wf_types.uint_8, register_address: wf_types.uint_16, register_value: wf_types.uint_16, response_length: int, verbose: bool = False) -> list[int]:
         """
         Write a single register using Modbus RTU Function Code 0x06.
         
@@ -122,6 +126,7 @@ class Modbus:
             slave_address: Modbus slave device address (0-255)
             register_address: Address of the register to write (0-65535)
             register_value: 16-bit value to write to the register (0-65535)
+            response_length: Expected length of the response packet
             verbose: Enable debug output
             
         Returns:
@@ -135,6 +140,7 @@ class Modbus:
         if not TypeCheck.is_uint8(slave_address): raise TypeError("slave_address must be an unsigned 8-bit integer (0-255).")
         if not TypeCheck.is_uint16(register_address): raise TypeError("register_address must be an unsigned 16-bit integer (0-65535).")
         if not TypeCheck.is_uint16(register_value): raise TypeError("register_value must be an unsigned 16-bit integer (0-65535).")
+        if not TypeCheck.is_uint8(response_length): raise TypeError("response_length must be an unsigned 8-bit integer (0-255).")
         if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean value (True or False).")
 
         # Function code to write single register.
@@ -150,19 +156,19 @@ class Modbus:
         packet.append(register_value & 0xFF)           # Low byte of register value
         
         # Calculate and append CRC.
-        crc = Modbus._calculate_modbus_crc(packet)
+        crc = Modbus.calculate_modbus_crc(packet)
         packet.extend(crc)
 
         # Convert packet to list of integers for transmission.
         command_packet = list(packet)
         
         # Send packet and receive response.
-        response_packet = self._send_and_receive_packet(command_packet=command_packet, verbose=verbose)
+        response_packet = self._send_and_receive_packet(command_packet=command_packet, response_length=response_length, verbose=verbose)
 
         # Return packets.
         return command_packet, response_packet
 
-    def write_multiple_registers(self, slave_address: wf_types.uint_8, starting_address: wf_types.uint_16, register_quantity: wf_types.uint_16, byte_quantity: wf_types.uint_8, payload: list[int], verbose: bool = False) -> list[int]:
+    def write_multiple_registers(self, slave_address: wf_types.uint_8, starting_address: wf_types.uint_16, register_quantity: wf_types.uint_16, byte_quantity: wf_types.uint_8, payload: list[int], response_length: int, verbose: bool = False) -> list[int]:
 
         # Validate parameters.
         if not TypeCheck.is_uint8(slave_address): raise TypeError("slave_address must be an unsigned 8-bit integer (0-255).")
@@ -170,6 +176,7 @@ class Modbus:
         if not TypeCheck.is_uint16(register_quantity): raise TypeError("register_quantity must be an unsigned 16-bit integer (0-65535).")
         if not TypeCheck.is_uint8(byte_quantity): raise TypeError("byte_quantity must be an unsigned 8-bit integer (0-255).")
         if not TypeCheck.is_int_list(payload): raise TypeError("payload must be a list of integers.")
+        if not TypeCheck.is_uint8(response_length): raise TypeError("response_length must be an unsigned 8-bit integer (0-255).")
         if not TypeCheck.is_bool(verbose): raise TypeError("verbose must be a boolean value (True or False).")
         
         # Function code to write multiple registers.
@@ -187,25 +194,26 @@ class Modbus:
         packet.extend(payload)
 
         # Calculate and append CRC.
-        crc = Modbus._calculate_modbus_crc(packet)
+        crc = Modbus.calculate_modbus_crc(packet)
         packet.extend(crc)
 
         # Convert packet to list of integers for transmission.
         command_packet = list(packet)
 
         # Send packet and receive response.
-        response_packet = self._send_and_receive_packet(command_packet=command_packet, verbose=verbose)
+        response_packet = self._send_and_receive_packet(command_packet=command_packet, response_length=response_length, verbose=verbose)
 
         # Return packets.
         return command_packet, response_packet
 
-    def _send_and_receive_packet(self, command_packet: list[int], verbose: bool = False) -> list[int]:
+    def _send_and_receive_packet(self, command_packet: list[int], response_length: int, verbose: bool = False) -> list[int]:
         
         # Send command packet.
         self.serial_connection.write(bytearray(command_packet))
 
         # Read response packet.
-        response = self.serial_connection.readline()  # Readline is blocking by timeout length by default.
+        #response = self.serial_connection.readline()  # Readline is blocking by timeout length by default.
+        response = self.serial_connection.read(response_length)  # Read fixed number of bytes.
 
         # Convert response to list of integers.
         response_packet = list(response)
@@ -232,7 +240,7 @@ class Modbus:
         except Exception as e:
             raise RuntimeError(f"could not open serial connection on port '{port}': {e}")
 
-    def _calculate_modbus_crc(data: bytes | bytearray, verbose: bool = False) -> bytearray:
+    def calculate_modbus_crc(data: bytes | bytearray, verbose: bool = False) -> bytearray:
         """
         Calculate CRC-16 checksum for Modbus RTU.
         

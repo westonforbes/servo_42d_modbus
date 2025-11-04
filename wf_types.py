@@ -66,7 +66,7 @@ class Parse:
         return val - (1 << 48) if val & (1 << 47) else val
     
     @staticmethod
-    def _parse_uint32(b1, b2, b3, b4):
+    def parse_uint32(b1, b2, b3, b4):
         """Helper to parse an unsigned 32-bit integer from four bytes (big-endian)."""
         # For unsigned integers, we just combine the bytes with shifting. No two's complement correction is needed.
         return (b1 << 24) | (b2 << 16) | (b3 << 8) | b4
